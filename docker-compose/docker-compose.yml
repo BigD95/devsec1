@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  jenkins-master:
+    image: jenkins/jenkins:lts
+    container_name: jenkins-master
+    user: root
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - /opt/jenkins/jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - jenkins-net
+
+  jenkins-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jenkins-agent
+    restart: unless-stopped
+    depends_on:
+      - jenkins-master
+    environment:
+      JENKINS_URL: "http://jenkins-master:8080"
+      JENKINS_AGENT_NAME: "docker-agent"
+      JENKINS_SECRET: "" # à remplir après ajout de l'agent dans Jenkins
+      JENKINS_AGENT_WORKDIR: "/home/jenkins/agent"
+    networks:
+      - jenkins-net
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  sonarqube:
+    image: sonarqube:latest
+    container_name: sonarqube
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      - SONAR_JDBC_URL=jdbc:postgresql://db:5432/sonar
+      - SONAR_JDBC_USERNAME=sonar
+      - SONAR_JDBC_PASSWORD=sonar
+    ports:
+      - "9000:9000"
+    networks:
+      - jenkins-net
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+
+  db:
+    image: postgres:15
+    container_name: sonar-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar
+      POSTGRES_DB: sonar
+    networks:
+      - jenkins-net
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  postgres_data:
+
+networks:
+  jenkins-net:
+    driver: bridge
